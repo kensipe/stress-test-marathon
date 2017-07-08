@@ -1,0 +1,17 @@
+{
+  "size": 1000,
+  "sort": [
+    {
+      "@timestamp": {
+        "order": "desc",
+        "unmapped_type": "boolean"
+      }
+    }
+  ],
+  "query": {
+    "bool": {
+      "must": [{"query_string": {"query": "class:deploy", "analyze_wildcard": true}}],
+      "must_not": []
+    }
+  }
+}

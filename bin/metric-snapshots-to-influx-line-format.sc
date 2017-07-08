@@ -53,9 +53,9 @@ object LogbackConfig {
     <root level="INFO"><appender-ref ref="stderr"/></root>
 </configuration>
 """.getBytes))
-
   }
 }
+
 object Helpers {
   val LineMatcher = "^(.+\\}|)([a-zA-Z]+ [a-zA-Z]+ [0-9]+ [0-9:]+ [A-Z]+ [0-9]+)$".r
   def shorten(name: String): String = {
