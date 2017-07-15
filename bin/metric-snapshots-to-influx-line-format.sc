@@ -30,7 +30,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
 import akka.util.ByteString
-import scala.util.Try
+import scala.util.{Try, Success, Failure}
 
 val format = DateTimeFormatter.ofPattern("EEE MMM d kk:mm:ss z yyyy")
 
@@ -128,17 +128,37 @@ akka {
   implicit val mat = ActorMaterializer()
 
   val done = FileIO.fromPath(file.toNIO)
-    .via(Framing.delimiter(ByteString("\n"), maximumFrameLength = Int.MaxValue))
+    .via(Framing.delimiter(
+      ByteString("\n"),
+      maximumFrameLength = Int.MaxValue,
+      allowTruncation = true))
     .map(_.utf8String)
     .collect { case LineMatcher(data, dateAsString) =>
       val json = if (data == "") JsNull else Json.parse(data)
       (json, ZonedDateTime.parse(dateAsString, format))
     }
     .sliding(2)
-    .collect { case Seq((_, date), (json, _)) => toInfluxDb(date, json) }
+    .collect { case Seq((_, date), (json, _)) =>
+      Try(toInfluxDb(date, json)) match {
+        case Success(r) => r
+        case Failure(ex) =>
+          System.err.println(s"Ah snap! Error parsing at ${date}; ${ex}")
+          ex.printStackTrace(System.err)
+          System.err.println(json)
+          Nil
+      }
+    }
     .mapConcat(identity)
     .runForeach(println)
 
-  System.err.println(Try(Await.result(done, 1.day)))
+  val result = Try(Await.result(done, 1.day))
   as.terminate()
+  result match {
+    case Success(_) =>
+      System.err.println("all done! Success")
+    case Failure(ex) =>
+      System.err.println(s"Error! ${ex}")
+      ex.printStackTrace(System.err)
+      System.exit(1)
+  }
 }

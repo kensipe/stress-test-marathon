@@ -1,5 +1,6 @@
 INDICES:=$(shell curl -s localhost:9200/_all | jq '. | keys[]' -r | grep "logstash")
 STEPS:=$(foreach F,$(wildcard artifacts/step-*.log),$(notdir $(basename $F)))
+.PHONY: load-metrics es-load reset-metrics
 
 output:
 	mkdir -p output
@@ -25,8 +26,32 @@ output/%.tsv: artifacts/%.log
 	bin/extract-http-response-metrics.sc $< > $@.tmp
 	mv $@.tmp $@
 
-output/%.pdf: output/%.tsv
+output/%.svg: output/%.tsv
 	cd viz-scripts && FILE=../$< OUTFILE=../$@ R --no-save < scale-single.R
 
-output/all.pdf: $(foreach STEP,$(STEPS),output/$(STEP).tsv) $(foreach STEP,$(STEPS),output/$(STEP).pdf)
+output/all.svg: $(foreach STEP,$(STEPS),output/$(STEP).tsv) $(foreach STEP,$(STEPS),output/$(STEP).svg)
 	cd viz-scripts/ && OUTFILE=../$@ R --no-save < scale-aggregate.R
+
+output/dcos-marathon-threaddumps.log output/dcos-marathon-only.log: artifacts/dcos-marathon-all.logs
+	mkdir -p output
+	bin/seperate-threaddumps.sc $< output/dcos-marathon-only.log.tmp output/dcos-marathon-threaddumps.log.tmp
+	mv output/dcos-marathon-only.log.tmp output/dcos-marathon-only.log
+	mv output/dcos-marathon-threaddumps.log.tmp output/dcos-marathon-threaddumps.log
+
+output/metrics.txt: artifacts/metrics.log
+	bin/metric-snapshots-to-influx-line-format.sc $< > $@.tmp
+	mv $@.tmp $@
+
+reset-metrics:
+	echo "drop database stress" | influx
+	echo "create database stress" | influx
+
+load-metrics: output/metrics.txt
+	bin/stream-to-influx.sc $< stress
+
+es-load:
+	rm -rf /tmp/es-load
+	ln -sf $(PWD) /tmp/es-load
+
+output/load-elasticsearch.db: /tmp/es-load output/dcos-marathon-only.log | es-load
+	logstash -f conf/dcos-marathon-for-loading

@@ -5,25 +5,21 @@ Sys.setenv(TZ='UTC')
 ## file <- Sys.getenv("FILE", unset = "./all.tsv")
 out_file <- Sys.getenv("OUTFILE", unset = "./output.pdf")
 
-read_the_thing <- function (label) {
+read_step <- function (label) {
     d <- read.table(paste("../output/step-", label, ".tsv", sep=""), sep = "\t", header = T)
     d$run <- rep(label, nrow(d))
     return(d)
 }
 
-d <- rbind(
-    read_the_thing("1-launch-500-good-hc"),
-    read_the_thing("2-launch-400-bad-hc"),
-    read_the_thing("3-good-hc-to-2"),
-    read_the_thing("4-good-hc-to-3"),
-    read_the_thing("5-good-hc-to-2-no-poll"),
-    read_the_thing("6-good-hc-to-3-no-poll"))
+steps <- sub("step-", "", tools::file_path_sans_ext(dir("../output/", pattern = "tsv$")))
+
+d <- do.call(rbind, lapply(steps, read_step))
 
 d$run <- as.factor(d$run)
 d$date <- as.POSIXct( d$date, origin="1970-01-01")
 f <- d[d$time > 0.0,]
 
-render.twice(function () {
+render.svg(function () {
     return
     (
         ggplot(f) +
@@ -33,14 +29,20 @@ render.twice(function () {
     )
 }, tools::file_path_sans_ext(out_file), width = 12, height = 6)
 
+means <- aggregate(time ~ run, f, mean)
+means$time <- round(means$time, 2)
+means
 
-render.twice(function () {
+render.svg(function () {
     return
     (
-        ggplot(f) +
+        ggplot(f, aes(x = run, y = time)) +
         labs(x = "time", y = "response time") +
         scale_y_continuous() +
-        geom_boxplot(aes(x = run, y = time, colour = run))
+        geom_boxplot(aes(colour = run)) +
+        theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+        geom_text(data = means, aes(label = time))
     )
+
 }, (paste(tools::file_path_sans_ext(out_file),"_box", sep="")), width = 12, height = 6)
 

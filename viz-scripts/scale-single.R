@@ -9,7 +9,7 @@ d <- read.table(file, sep = "\t", header = T)
 
 f <- d[d$time > 0.0,]
 
-render.twice(function() {
+render.svg(function() {
     return
     (
         ggplot(f, aes(x = app.id, y = time)) +
