@@ -32,7 +32,7 @@ output/%.svg: output/%.tsv
 output/all.svg: $(foreach STEP,$(STEPS),output/$(STEP).tsv) $(foreach STEP,$(STEPS),output/$(STEP).svg)
 	cd viz-scripts/ && OUTFILE=../$@ R --no-save < scale-aggregate.R
 
-output/dcos-marathon-threaddumps.log output/dcos-marathon-only.log: artifacts/dcos-marathon-all.logs
+output/dcos-marathon-threaddumps.log output/dcos-marathon-only.log: artifacts/dcos-marathon.log
 	mkdir -p output
 	bin/seperate-threaddumps.sc $< output/dcos-marathon-only.log.tmp output/dcos-marathon-threaddumps.log.tmp
 	mv output/dcos-marathon-only.log.tmp output/dcos-marathon-only.log
@@ -53,5 +53,5 @@ es-load:
 	rm -rf /tmp/es-load
 	ln -sf $(PWD) /tmp/es-load
 
-output/load-elasticsearch.db: /tmp/es-load output/dcos-marathon-only.log | es-load
+output/load-elasticsearch.db: output/dcos-marathon-only.log | es-load
 	logstash -f conf/dcos-marathon-for-loading
