@@ -47,7 +47,7 @@ reset-metrics:
 	echo "create database stress" | influx
 
 load-metrics: output/metrics.txt
-	bin/stream-to-influx.sc $< stress
+	bin/stream-to-influx.sc $< metrics
 
 es-load:
 	rm -rf /tmp/es-load
@@ -55,3 +55,6 @@ es-load:
 
 output/load-elasticsearch.db: output/dcos-marathon-only.log | es-load
 	logstash -f conf/dcos-marathon-for-loading
+
+logstash-testing:
+	logstash -f conf/dcos-marathon-for-output --config.reload.automatic

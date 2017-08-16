@@ -3,7 +3,7 @@
 /*
  * Given a series of metrics generated on a loop, such as:
  *
- *   while sleep 1; do date; curl marathon.mesos:8080/metrics; done >> metrics.log
+ *   while sleep 1; do echo; date; curl marathon.mesos:8080/metrics; done >> metrics.log
  *
  * We parse this crude format and turn it into something we can feed to influxDB
  *
@@ -57,7 +57,7 @@ object LogbackConfig {
 }
 
 object Helpers {
-  val LineMatcher = "^(.+\\}|)([a-zA-Z]+ [a-zA-Z]+ [0-9]+ [0-9:]+ [A-Z]+ [0-9]+)$".r
+  val DateLine = "^([A-Z][a-z]+.+)$".r
   def shorten(name: String): String = {
     val pieces = name.split('.')
     if (pieces.length < 2)
@@ -109,7 +109,6 @@ object Helpers {
 
 }
 
-class DerpLogger
 @main
 def main(file: Path): Unit = {
   import Helpers._
@@ -128,17 +127,40 @@ akka {
   implicit val mat = ActorMaterializer()
 
   val done = FileIO.fromPath(file.toNIO)
+    .take(1000)
     .via(Framing.delimiter(
       ByteString("\n"),
       maximumFrameLength = Int.MaxValue,
       allowTruncation = true))
     .map(_.utf8String)
-    .collect { case LineMatcher(data, dateAsString) =>
-      val json = if (data == "") JsNull else Json.parse(data)
-      (json, ZonedDateTime.parse(dateAsString, format))
+    .statefulMapConcat[(ZonedDateTime, JsValue)] { () =>
+      val linesSoFar = List.newBuilder[String]
+      var currentDate: Option[ZonedDateTime] = None
+
+      {
+        case DateLine(dateAsString) =>
+          val formerLines = linesSoFar.result.mkString("\n")
+          val formerDate = currentDate
+          currentDate = Some(ZonedDateTime.parse(dateAsString, format))
+          linesSoFar.clear
+
+          (Try(Json.parse(formerLines)), formerDate) match {
+            case (Success(jsValue), Some(formerDate)) =>
+              List((formerDate, jsValue))
+            case (Failure(ex), _) =>
+              if (formerLines.trim != "")
+                System.err.println(s"Warning: Exception parsing JSON '${formerLines}': ${ex}")
+              Nil
+            case (_, None) =>
+              System.err.println(s"Skipping content ${formerLines}; missing date")
+              Nil
+          }
+        case other =>
+          linesSoFar += other
+          Nil
+      }
     }
-    .sliding(2)
-    .collect { case Seq((_, date), (json, _)) =>
+    .mapConcat { case (date, json) =>
       Try(toInfluxDb(date, json)) match {
         case Success(r) => r
         case Failure(ex) =>
@@ -148,7 +170,6 @@ akka {
           Nil
       }
     }
-    .mapConcat(identity)
     .runForeach(println)
 
   val result = Try(Await.result(done, 1.day))
