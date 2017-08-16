@@ -127,7 +127,6 @@ akka {
   implicit val mat = ActorMaterializer()
 
   val done = FileIO.fromPath(file.toNIO)
-    .take(1000)
     .via(Framing.delimiter(
       ByteString("\n"),
       maximumFrameLength = Int.MaxValue,

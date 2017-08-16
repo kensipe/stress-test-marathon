@@ -43,8 +43,8 @@ output/metrics.txt: artifacts/metrics.log
 	mv $@.tmp $@
 
 reset-metrics:
-	echo "drop database stress" | influx
-	echo "create database stress" | influx
+	echo "drop database metrics" | influx
+	echo "create database metrics" | influx
 
 load-metrics: output/metrics.txt
 	bin/stream-to-influx.sc $< metrics
